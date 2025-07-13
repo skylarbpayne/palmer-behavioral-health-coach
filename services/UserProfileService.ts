@@ -1,5 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { UserProfile, ProfileFieldKey } from '../types/UserProfile';
+import { 
+  UserProfile, 
+  ProfileFieldKey, 
+  ProfileSimpleFieldKey, 
+  ProfileArrayFieldKey,
+  UserProfileSchema,
+  ProfileField,
+  ProfileArrayItem,
+  FieldMetadata
+} from '../types/UserProfile';
+import { v4 as uuidv4 } from 'uuid';
 
 const USER_PROFILE_KEY = '@user_profile';
 
@@ -17,12 +27,7 @@ class UserProfileService {
   }
 
   private createEmptyProfile(): UserProfile {
-    return {
-      metadata: {
-        lastChanged: {},
-        lastConfirmed: {}
-      }
-    };
+    return {};
   }
 
   async loadProfile(): Promise<UserProfile> {
@@ -35,13 +40,14 @@ class UserProfileService {
       
       if (profileData) {
         const parsed = JSON.parse(profileData);
-        this.profile = {
-          ...parsed,
-          metadata: {
-            lastChanged: this.parseDates(parsed.metadata?.lastChanged || {}),
-            lastConfirmed: this.parseDates(parsed.metadata?.lastConfirmed || {})
-          }
-        };
+        this.profile = this.deserializeProfile(parsed);
+        
+        // Validate with Zod schema
+        const validation = UserProfileSchema.safeParse(this.profile);
+        if (!validation.success) {
+          console.warn('Profile validation failed, creating new profile:', validation.error);
+          this.profile = this.createEmptyProfile();
+        }
       } else {
         this.profile = this.createEmptyProfile();
       }
@@ -60,61 +66,155 @@ class UserProfileService {
     }
 
     try {
-      const profileToStore = {
-        ...this.profile,
-        metadata: {
-          lastChanged: this.stringifyDates(this.profile.metadata.lastChanged),
-          lastConfirmed: this.stringifyDates(this.profile.metadata.lastConfirmed)
-        }
-      };
-
-      await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profileToStore));
+      const serializedProfile = this.serializeProfile(this.profile);
+      await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(serializedProfile));
     } catch (error) {
       console.error('Error saving user profile:', error);
       throw error;
     }
   }
 
-  async getField<K extends ProfileFieldKey>(field: K): Promise<UserProfile[K] | undefined> {
+  async getSimpleField<K extends ProfileSimpleFieldKey>(field: K): Promise<UserProfile[K] | undefined> {
     const profile = await this.loadProfile();
     return profile[field];
   }
 
-  async updateField<K extends ProfileFieldKey>(
-    field: K, 
-    value: UserProfile[K], 
+  async getArrayField<K extends ProfileArrayFieldKey>(field: K): Promise<UserProfile[K] | undefined> {
+    const profile = await this.loadProfile();
+    return profile[field];
+  }
+
+  async updateSimpleField<K extends ProfileSimpleFieldKey>(
+    field: K,
+    value: K extends 'sex' ? 'male' | 'female' | 'intersex' : string,
     confirm: boolean = false
   ): Promise<void> {
     const profile = await this.loadProfile();
     const now = new Date();
 
-    profile[field] = value;
-    profile.metadata.lastChanged[field] = now;
-    
-    if (confirm) {
-      profile.metadata.lastConfirmed[field] = now;
+    const fieldData: ProfileField<any> = {
+      value,
+      metadata: {
+        lastChanged: now,
+        lastConfirmed: confirm ? now : profile[field]?.metadata.lastConfirmed
+      }
+    };
+
+    (profile as any)[field] = fieldData;
+    this.profile = profile;
+    await this.saveProfile();
+  }
+
+  async addArrayItem<K extends ProfileArrayFieldKey>(
+    field: K,
+    value: string,
+    confirm: boolean = false
+  ): Promise<string> {
+    const profile = await this.loadProfile();
+    const now = new Date();
+    const id = uuidv4();
+
+    const newItem: ProfileArrayItem<string> = {
+      value,
+      id,
+      metadata: {
+        lastChanged: now,
+        lastConfirmed: confirm ? now : undefined
+      }
+    };
+
+    if (!profile[field]) {
+      (profile as any)[field] = [];
     }
 
+    (profile[field] as ProfileArrayItem<string>[]).push(newItem);
     this.profile = profile;
     await this.saveProfile();
+    
+    return id;
   }
 
-  async confirmField(field: ProfileFieldKey): Promise<void> {
+  async removeArrayItem<K extends ProfileArrayFieldKey>(
+    field: K,
+    id: string
+  ): Promise<void> {
     const profile = await this.loadProfile();
-    profile.metadata.lastConfirmed[field] = new Date();
-    this.profile = profile;
-    await this.saveProfile();
+    
+    if (profile[field]) {
+      (profile[field] as ProfileArrayItem<string>[]) = 
+        (profile[field] as ProfileArrayItem<string>[]).filter(item => item.id !== id);
+      
+      this.profile = profile;
+      await this.saveProfile();
+    }
   }
 
-  async getFieldMetadata(field: ProfileFieldKey): Promise<{
-    lastChanged?: Date;
-    lastConfirmed?: Date;
-  }> {
+  async updateArrayItem<K extends ProfileArrayFieldKey>(
+    field: K,
+    id: string,
+    value: string,
+    confirm: boolean = false
+  ): Promise<void> {
     const profile = await this.loadProfile();
-    return {
-      lastChanged: profile.metadata.lastChanged[field],
-      lastConfirmed: profile.metadata.lastConfirmed[field]
-    };
+    
+    if (profile[field]) {
+      const item = (profile[field] as ProfileArrayItem<string>[]).find(item => item.id === id);
+      if (item) {
+        const now = new Date();
+        item.value = value;
+        item.metadata.lastChanged = now;
+        if (confirm) {
+          item.metadata.lastConfirmed = now;
+        }
+        
+        this.profile = profile;
+        await this.saveProfile();
+      }
+    }
+  }
+
+  async confirmSimpleField<K extends ProfileSimpleFieldKey>(field: K): Promise<void> {
+    const profile = await this.loadProfile();
+    if (profile[field]) {
+      profile[field]!.metadata.lastConfirmed = new Date();
+      this.profile = profile;
+      await this.saveProfile();
+    }
+  }
+
+  async confirmArrayItem<K extends ProfileArrayFieldKey>(
+    field: K,
+    id: string
+  ): Promise<void> {
+    const profile = await this.loadProfile();
+    
+    if (profile[field]) {
+      const item = (profile[field] as ProfileArrayItem<string>[]).find(item => item.id === id);
+      if (item) {
+        item.metadata.lastConfirmed = new Date();
+        this.profile = profile;
+        await this.saveProfile();
+      }
+    }
+  }
+
+  async getSimpleFieldMetadata<K extends ProfileSimpleFieldKey>(field: K): Promise<FieldMetadata | undefined> {
+    const profile = await this.loadProfile();
+    return profile[field]?.metadata;
+  }
+
+  async getArrayItemMetadata<K extends ProfileArrayFieldKey>(
+    field: K,
+    id: string
+  ): Promise<FieldMetadata | undefined> {
+    const profile = await this.loadProfile();
+    
+    if (profile[field]) {
+      const item = (profile[field] as ProfileArrayItem<string>[]).find(item => item.id === id);
+      return item?.metadata;
+    }
+    
+    return undefined;
   }
 
   async getAllFields(): Promise<UserProfile> {
@@ -131,24 +231,64 @@ class UserProfileService {
     }
   }
 
-  private parseDates(dateObj: Record<string, any>): Record<string, Date> {
-    const result: Record<string, Date> = {};
-    for (const [key, value] of Object.entries(dateObj)) {
+  private serializeProfile(profile: UserProfile): any {
+    const serialized: any = {};
+    
+    for (const [key, value] of Object.entries(profile)) {
       if (value) {
-        result[key] = new Date(value);
+        if (Array.isArray(value)) {
+          // Handle array fields
+          serialized[key] = value.map(item => ({
+            ...item,
+            metadata: {
+              lastChanged: item.metadata.lastChanged.toISOString(),
+              lastConfirmed: item.metadata.lastConfirmed?.toISOString()
+            }
+          }));
+        } else {
+          // Handle simple fields
+          serialized[key] = {
+            ...value,
+            metadata: {
+              lastChanged: value.metadata.lastChanged.toISOString(),
+              lastConfirmed: value.metadata.lastConfirmed?.toISOString()
+            }
+          };
+        }
       }
     }
-    return result;
+    
+    return serialized;
   }
 
-  private stringifyDates(dateObj: Record<string, Date>): Record<string, string> {
-    const result: Record<string, string> = {};
-    for (const [key, value] of Object.entries(dateObj)) {
-      if (value instanceof Date) {
-        result[key] = value.toISOString();
+  private deserializeProfile(serialized: any): UserProfile {
+    const profile: UserProfile = {};
+    
+    for (const [key, value] of Object.entries(serialized)) {
+      if (value) {
+        if (Array.isArray(value)) {
+          // Handle array fields
+          (profile as any)[key] = value.map((item: any) => ({
+            ...item,
+            metadata: {
+              lastChanged: new Date(item.metadata.lastChanged),
+              lastConfirmed: item.metadata.lastConfirmed ? new Date(item.metadata.lastConfirmed) : undefined
+            }
+          }));
+        } else if (value && typeof value === 'object' && 'metadata' in value) {
+          // Handle simple fields
+          (profile as any)[key] = {
+            ...value,
+            metadata: {
+              lastChanged: new Date((value as any).metadata.lastChanged),
+              lastConfirmed: (value as any).metadata.lastConfirmed ? new Date((value as any).metadata.lastConfirmed) : undefined
+            }
+          };
+        }
       }
     }
-    return result;
+    
+    return profile;
   }
 }
 
