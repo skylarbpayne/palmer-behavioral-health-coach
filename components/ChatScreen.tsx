@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -7,28 +7,73 @@ import {
   TouchableOpacity, 
   FlatList, 
   KeyboardAvoidingView,
-  Platform 
+  Platform,
+  ActivityIndicator 
 } from 'react-native';
 import { ProfileTools } from '../utils/ProfileTools';
-
-interface ChatMessage {
-  id: string;
-  text: string;
-  isUser: boolean;
-  timestamp: Date;
-}
+import { ChatTools } from '../utils/ChatTools';
+import { ChatMessage } from '../types/ChatTypes';
 
 export default function ChatScreen() {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: '1',
-      text: "Hello! I'm your personal health coach. How can I help you today?",
-      isUser: false,
-      timestamp: new Date(),
-    }
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+
+  useEffect(() => {
+    initializeChatService();
+  }, []);
+
+  const initializeChatService = async () => {
+    try {
+      console.log('Initializing chat service...');
+      setLoading(true);
+      await ChatTools.initialize();
+      console.log('ChatTools initialized successfully');
+      await loadMessages();
+      console.log('Messages loaded successfully');
+      setInitialized(true);
+      console.log('Chat service fully initialized');
+    } catch (error) {
+      console.error('Error initializing chat service:', error);
+      // Add default welcome message if initialization fails
+      setMessages([{
+        id: '1',
+        text: "Hello! I'm your personal health coach. How can I help you today?",
+        isUser: false,
+        timestamp: new Date(),
+      }]);
+      console.log('Added fallback welcome message');
+    } finally {
+      setLoading(false);
+      console.log('Loading complete, initialized:', initialized);
+    }
+  };
+
+  const loadMessages = async () => {
+    try {
+      const existingMessages = await ChatTools.getRecentMessages(100);
+      
+      if (existingMessages.length === 0) {
+        // Add welcome message for new conversations
+        const welcomeMessage = await ChatTools.addCoachResponse(
+          "Hello! I'm your personal health coach. How can I help you today?"
+        );
+        setMessages([welcomeMessage]);
+      } else {
+        setMessages(existingMessages);
+      }
+    } catch (error) {
+      console.error('Error loading messages:', error);
+      setMessages([{
+        id: '1',
+        text: "Hello! I'm your personal health coach. How can I help you today?",
+        isUser: false,
+        timestamp: new Date(),
+      }]);
+    }
+  };
 
   const getHardcodedResponse = (userMessage: string): string => {
     const message = userMessage.toLowerCase();
@@ -49,32 +94,81 @@ export default function ChatScreen() {
   };
 
   const sendMessage = async () => {
-    if (inputText.trim() === '') return;
-
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      text: inputText.trim(),
-      isUser: true,
-      timestamp: new Date(),
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setInputText('');
-
-    setTimeout(() => {
-      const coachResponse: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        text: getHardcodedResponse(inputText.trim()),
-        isUser: false,
+    
+    if (inputText.trim() === '') {
+      console.log('Empty message, not sending');
+      return;
+    }
+    
+    if (!initialized) {
+      console.log('Not initialized, falling back to simple message handling');
+      // Fallback to simple message handling if encryption isn't working
+      const messageText = inputText.trim();
+      setInputText('');
+      
+      const userMessage: ChatMessage = {
+        id: Date.now().toString(),
+        text: messageText,
+        isUser: true,
         timestamp: new Date(),
       };
-
-      setMessages(prev => [...prev, coachResponse]);
       
+      setMessages(prev => [...prev, userMessage]);
+      
+      setTimeout(() => {
+        const coachResponse: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          text: getHardcodedResponse(messageText),
+          isUser: false,
+          timestamp: new Date(),
+        };
+        
+        setMessages(prev => [...prev, coachResponse]);
+        
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }, 1000);
+      
+      return;
+    }
+
+    const messageText = inputText.trim();
+    setInputText('');
+
+    try {
+      console.log('Attempting to add user message via ChatTools...');
+      // Add user message to encrypted storage
+      const userMessage = await ChatTools.addUserMessage(messageText);
+      console.log('User message added successfully:', userMessage);
+      setMessages(prev => [...prev, userMessage]);
+
+      // Scroll to bottom after user message
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
-    }, 1000);
+
+      // Generate and add coach response after delay
+      setTimeout(async () => {
+        try {
+          console.log('Adding coach response...');
+          const responseText = getHardcodedResponse(messageText);
+          const coachResponse = await ChatTools.addCoachResponse(responseText);
+          console.log('Coach response added successfully:', coachResponse);
+          setMessages(prev => [...prev, coachResponse]);
+          
+          setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        } catch (error) {
+          console.error('Error adding coach response:', error);
+        }
+      }, 1000);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      // Restore input text if there was an error
+      setInputText(messageText);
+    }
   };
 
   const renderMessage = ({ item }: { item: ChatMessage }) => (
@@ -94,6 +188,15 @@ export default function ChatScreen() {
     </View>
   );
 
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>Initializing secure chat...</Text>
+      </View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView 
       style={styles.container}
@@ -101,7 +204,7 @@ export default function ChatScreen() {
     >
       <View style={styles.header}>
         <Text style={styles.title}>Health Coach</Text>
-        <Text style={styles.subtitle}>Your personal wellness companion</Text>
+        <Text style={styles.subtitle}>Your personal wellness companion 🔒</Text>
       </View>
       
       <FlatList
@@ -145,6 +248,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  centered: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
   },
   header: {
     backgroundColor: '#fff',

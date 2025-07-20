@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView, StyleSheet } from 'react-native';
 import HealthSummary from './components/HealthSummary';
 import ChatScreen from './components/ChatScreen';
+import ChatDebug from './components/ChatDebug';
 
 const Tab = createBottomTabNavigator();
 
@@ -40,6 +41,14 @@ export default function App() {
             options={{
               title: 'Health Coach',
               tabBarLabel: 'Chat',
+            }}
+          />
+          <Tab.Screen 
+            name="Debug" 
+            component={ChatDebug}
+            options={{
+              title: 'Chat Debug',
+              tabBarLabel: 'Debug',
             }}
           />
         </Tab.Navigator>
