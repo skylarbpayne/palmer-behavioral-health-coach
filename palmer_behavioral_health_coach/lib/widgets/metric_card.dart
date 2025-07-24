@@ -11,23 +11,21 @@ class MetricCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: AppConstants.cardDecoration,
-      margin: const EdgeInsets.all(AppConstants.cardMargin),
-      padding: const EdgeInsets.all(12.0), // Reduced padding
+      margin: const EdgeInsets.all(4.0), // Reduced margin since grid has spacing
+      padding: const EdgeInsets.all(14.0), // Slightly increased padding for better text space
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           // Title
-          Flexible(
-            child: Text(
-              metric.title,
-              style: AppConstants.subtitleStyle.copyWith(
-                fontSize: 14.0, // Reduced font size
-                fontWeight: FontWeight.w600,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+          Text(
+            metric.title,
+            style: AppConstants.subtitleStyle.copyWith(
+              fontSize: 15.0, // Slightly larger for better readability
+              fontWeight: FontWeight.w600,
             ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 6),
           
@@ -40,7 +38,7 @@ class MetricCard extends StatelessWidget {
                     metric.value,
                     style: AppConstants.largeTitleStyle.copyWith(
                       color: _getValueColor(),
-                      fontSize: 20.0, // Further reduced font size
+                      fontSize: 22.0, // Balanced size for readability
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -66,15 +64,13 @@ class MetricCard extends StatelessWidget {
           const SizedBox(height: 6),
           
           // Subtitle
-          Flexible(
-            child: Text(
-              metric.subtitle,
-              style: AppConstants.captionStyle.copyWith(
-                fontSize: 11.0, // Reduced font size
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+          Text(
+            metric.subtitle,
+            style: AppConstants.captionStyle.copyWith(
+              fontSize: 12.0, // Improved readability
             ),
+            maxLines: 3, // Allow more lines for longer descriptions
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

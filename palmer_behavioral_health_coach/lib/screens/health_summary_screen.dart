@@ -45,9 +45,9 @@ class HealthSummaryScreen extends StatelessWidget {
               child: GridView.builder(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  childAspectRatio: 1.3, // Increased aspect ratio for more width
-                  crossAxisSpacing: 0,
-                  mainAxisSpacing: 0,
+                  childAspectRatio: 1.0, // More square cards for better text accommodation
+                  crossAxisSpacing: 4,
+                  mainAxisSpacing: 4,
                 ),
                 itemCount: healthMetrics.length,
                 itemBuilder: (context, index) {
