@@ -13,13 +13,16 @@ import {
 import { ProfileTools } from '../utils/ProfileTools';
 import { ChatTools } from '../utils/ChatTools';
 import { ChatMessage } from '../types/ChatTypes';
+import AIService from '../services/AIService';
 
 export default function ChatScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+  const aiService = AIService.getInstance();
 
   useEffect(() => {
     initializeChatService();
@@ -29,8 +32,16 @@ export default function ChatScreen() {
     try {
       console.log('Initializing chat service...');
       setLoading(true);
+      
+      // Initialize chat tools
       await ChatTools.initialize();
       console.log('ChatTools initialized successfully');
+      
+      // Initialize AI service (non-blocking)
+      aiService.initialize().catch(error => {
+        console.log('AI service initialization failed, will use fallback responses:', error);
+      });
+      
       await loadMessages();
       console.log('Messages loaded successfully');
       setInitialized(true);
@@ -38,9 +49,10 @@ export default function ChatScreen() {
     } catch (error) {
       console.error('Error initializing chat service:', error);
       // Add default welcome message if initialization fails
+      const welcomeMessage = await aiService.generateInitialProfileCheck();
       setMessages([{
         id: '1',
-        text: "Hello! I'm your personal health coach. How can I help you today?",
+        text: welcomeMessage,
         isUser: false,
         timestamp: new Date(),
       }]);
@@ -56,40 +68,52 @@ export default function ChatScreen() {
       const existingMessages = await ChatTools.getRecentMessages(100);
       
       if (existingMessages.length === 0) {
-        // Add welcome message for new conversations
-        const welcomeMessage = await ChatTools.addCoachResponse(
-          "Hello! I'm your personal health coach. How can I help you today?"
-        );
+        // Generate personalized welcome message using AI
+        const welcomeText = await aiService.generateInitialProfileCheck();
+        const welcomeMessage = await ChatTools.addCoachResponse(welcomeText);
         setMessages([welcomeMessage]);
       } else {
         setMessages(existingMessages);
       }
     } catch (error) {
       console.error('Error loading messages:', error);
+      const fallbackWelcome = await aiService.generateInitialProfileCheck();
       setMessages([{
         id: '1',
-        text: "Hello! I'm your personal health coach. How can I help you today?",
+        text: fallbackWelcome,
         isUser: false,
         timestamp: new Date(),
       }]);
     }
   };
 
-  const getHardcodedResponse = (userMessage: string): string => {
-    const message = userMessage.toLowerCase();
+  const generateAIResponse = async (userMessage: string, conversationHistory: string[]): Promise<string> => {
+    setAiLoading(true);
     
-    if (message.includes('hello') || message.includes('hi')) {
-      return "Hello! I'm here to help you with your health journey. What would you like to discuss?";
-    } else if (message.includes('goal') || message.includes('goals')) {
-      return "Setting health goals is important! I can help you track and achieve your goals. What specific goal would you like to work on?";
-    } else if (message.includes('symptom') || message.includes('symptoms')) {
-      return "I understand you want to discuss symptoms. I'm here to listen and provide support. Can you tell me more about what you're experiencing?";
-    } else if (message.includes('help')) {
-      return "I'm here to support your health journey! I can help with goal setting, tracking symptoms, discussing interventions, and providing general wellness guidance.";
-    } else if (message.includes('profile') || message.includes('information')) {
-      return "I can access your profile information to provide personalized guidance. This helps me understand your health goals and current situation better.";
-    } else {
-      return "Thank you for sharing that with me. I'm here to support you on your health journey. Is there something specific you'd like to work on today?";
+    try {
+      if (aiService.isReady()) {
+        console.log('Generating AI response...');
+        const aiResponse = await aiService.generateResponse(userMessage, conversationHistory);
+        
+        if (aiResponse.profileUpdated) {
+          console.log('Profile was updated based on conversation');
+        }
+        
+        if (aiResponse.error) {
+          console.log('AI response had error, using fallback');
+          return aiService.generateFallbackResponse(userMessage);
+        }
+        
+        return aiResponse.text;
+      } else {
+        console.log('AI not ready, using fallback response');
+        return aiService.generateFallbackResponse(userMessage);
+      }
+    } catch (error) {
+      console.error('Error generating AI response:', error);
+      return aiService.generateFallbackResponse(userMessage);
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -115,10 +139,13 @@ export default function ChatScreen() {
       
       setMessages(prev => [...prev, userMessage]);
       
-      setTimeout(() => {
+      setTimeout(async () => {
+        const conversationHistory = messages.map(msg => `${msg.isUser ? 'User' : 'Coach'}: ${msg.text}`);
+        const responseText = await generateAIResponse(messageText, conversationHistory);
+        
         const coachResponse: ChatMessage = {
           id: (Date.now() + 1).toString(),
-          text: getHardcodedResponse(messageText),
+          text: responseText,
           isUser: false,
           timestamp: new Date(),
         };
@@ -151,8 +178,9 @@ export default function ChatScreen() {
       // Generate and add coach response after delay
       setTimeout(async () => {
         try {
-          console.log('Adding coach response...');
-          const responseText = getHardcodedResponse(messageText);
+          console.log('Generating coach response...');
+          const conversationHistory = messages.map(msg => `${msg.isUser ? 'User' : 'Coach'}: ${msg.text}`);
+          const responseText = await generateAIResponse(messageText, conversationHistory);
           const coachResponse = await ChatTools.addCoachResponse(responseText);
           console.log('Coach response added successfully:', coachResponse);
           setMessages(prev => [...prev, coachResponse]);
@@ -203,8 +231,10 @@ export default function ChatScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.header}>
-        <Text style={styles.title}>Health Coach</Text>
-        <Text style={styles.subtitle}>Your personal wellness companion 🔒</Text>
+        <Text style={styles.title}>PALMER</Text>
+        <Text style={styles.subtitle}>
+          {aiLoading ? 'Thinking... 🤔' : 'Your behavioral health coach 🔒'}
+        </Text>
       </View>
       
       <FlatList
