@@ -1,41 +1,59 @@
 import 'package:flutter/material.dart';
+import '../models/health_models.dart';
+import '../widgets/metric_card.dart';
+import '../utils/constants.dart';
 
 class HealthSummaryScreen extends StatelessWidget {
   const HealthSummaryScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final healthMetrics = MockHealthData.getHealthMetrics();
+    
     return Scaffold(
+      backgroundColor: AppConstants.background,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('Health Summary'),
+        backgroundColor: AppConstants.primaryGreen,
+        title: const Text(
+          'Health Summary',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        elevation: 0,
       ),
-      body: const Center(
+      body: Padding(
+        padding: const EdgeInsets.all(AppConstants.screenPadding),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Icon(
-              Icons.favorite,
-              size: 80,
-              color: Color(0xFF4CAF50),
-            ),
-            SizedBox(height: 20),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Welcome section
             Text(
-              'Health Summary',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF333333),
-              ),
+              'Your Health Overview',
+              style: AppConstants.largeTitleStyle,
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: 8),
             Text(
-              'Your health metrics and progress will appear here',
-              style: TextStyle(
-                fontSize: 16,
-                color: Color(0xFF666666),
+              'Track your progress and stay motivated',
+              style: AppConstants.captionStyle,
+            ),
+            const SizedBox(height: 20),
+            
+            // Metrics grid
+            Expanded(
+              child: GridView.builder(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 1.3, // Increased aspect ratio for more width
+                  crossAxisSpacing: 0,
+                  mainAxisSpacing: 0,
+                ),
+                itemCount: healthMetrics.length,
+                itemBuilder: (context, index) {
+                  return MetricCard(metric: healthMetrics[index]);
+                },
               ),
-              textAlign: TextAlign.center,
             ),
           ],
         ),
