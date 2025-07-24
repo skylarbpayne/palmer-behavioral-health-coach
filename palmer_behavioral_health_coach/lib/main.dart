@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'screens/health_summary_screen.dart';
+import 'screens/chat_screen.dart';
+import 'screens/debug_screen.dart';
 
 void main() {
   runApp(const PalmerApp());
@@ -15,43 +18,55 @@ class PalmerApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF4CAF50)),
         useMaterial3: true,
       ),
-      home: const HomeScreen(),
+      home: const MainNavigationScreen(),
     );
   }
 }
 
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+class MainNavigationScreen extends StatefulWidget {
+  const MainNavigationScreen({super.key});
+
+  @override
+  State<MainNavigationScreen> createState() => _MainNavigationScreenState();
+}
+
+class _MainNavigationScreenState extends State<MainNavigationScreen> {
+  int _selectedIndex = 0;
+
+  static const List<Widget> _screens = <Widget>[
+    HealthSummaryScreen(),
+    ChatScreen(),
+    DebugScreen(),
+  ];
+
+  void _onItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('Palmer Behavioral Health Coach'),
-      ),
-      body: const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Text(
-              'Palmer Behavioral Health Coach',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF4CAF50),
-              ),
-            ),
-            SizedBox(height: 20),
-            Text(
-              'Your AI-powered behavioral health companion',
-              style: TextStyle(
-                fontSize: 16,
-                color: Color(0xFF666666),
-              ),
-            ),
-          ],
-        ),
+      body: _screens[_selectedIndex],
+      bottomNavigationBar: BottomNavigationBar(
+        items: const <BottomNavigationBarItem>[
+          BottomNavigationBarItem(
+            icon: Icon(Icons.favorite),
+            label: 'Health',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.chat_bubble_outline),
+            label: 'Chat',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.bug_report),
+            label: 'Debug',
+          ),
+        ],
+        currentIndex: _selectedIndex,
+        selectedItemColor: const Color(0xFF4CAF50),
+        onTap: _onItemTapped,
       ),
     );
   }
