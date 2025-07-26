@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/chat_models.dart';
+import 'chat_storage_service.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:flutter_gemma/core/model.dart';
 import 'package:flutter_gemma/pigeon.g.dart';
@@ -11,6 +12,7 @@ class AiChatService {
   AiChatService._internal();
 
   final FlutterGemmaPlugin _gemma = FlutterGemmaPlugin.instance;
+  final ChatStorageService _storage = ChatStorageService();
   InferenceChat? chat;
   bool _isInitialized = false;
   bool _isInitializing = false;
@@ -35,6 +37,7 @@ Communication style: Warm, professional, curious, respectful. Keep responses con
     _isInitializing = true;
     
     try {
+      await _storage.initialize();
       await _initializeModel();
       _isInitialized = true;
       print('✅ Gemma AI model initialized successfully');
@@ -176,23 +179,29 @@ Communication style: Warm, professional, curious, respectful. Keep responses con
   }
 
   Future<ChatMessage> generateResponse(String userMessage) async {
+    // Store user message first
+    await _storage.addUserMessage(userMessage);
+    
     // Initialize if not ready
     if (!isReady() && !_isInitializing) {
       await initialize();
     }
     
+    String responseText;
     if (!isReady()) {
-      throw Exception('AI model not initialized and initialization failed');
+      // Use fallback response if AI fails
+      responseText = _generateFallbackResponse(userMessage);
+    } else {
+      try {
+        responseText = await _generateAIResponse(userMessage);
+      } catch (e) {
+        print('AI response failed, using fallback: $e');
+        responseText = _generateFallbackResponse(userMessage);
+      }
     }
 
-    final responseText = await _generateAIResponse(userMessage);
-
-    return ChatMessage(
-      id: 'coach_${DateTime.now().millisecondsSinceEpoch}',
-      text: responseText,
-      isUser: false,
-      timestamp: DateTime.now(),
-    );
+    // Store and return coach response
+    return await _storage.addCoachResponse(responseText);
   }
 
   Future<String> _generateAIResponse(String userMessage) async {
@@ -255,6 +264,58 @@ Communication style: Warm, professional, curious, respectful. Keep responses con
       return 'Web platform - memory info not available';
     }
     return 'Native platform - detailed memory info requires platform-specific implementation';
+  }
+
+  String _generateFallbackResponse(String userMessage) {
+    final responses = [
+      "Hello! I'm PALMER, your behavioral health coach. How are you feeling today?",
+      "That's interesting. Can you tell me more about that?",
+      "I understand. What would you like to work on?",
+      "That sounds like a great goal. How can I help you achieve it?",
+      "I hear you. How has that been affecting you lately?",
+      "Thank you for sharing that with me. What support would be most helpful right now?",
+      "It sounds like you're going through a challenging time. What coping strategies have you tried?",
+      "I appreciate your openness. What would feel most manageable for you today?",
+      "That makes sense. How do you usually handle situations like this?",
+      "I'm here to support you. What's one small step you could take today?",
+      "That's a lot to process. What feels most important to focus on right now?",
+      "How are you taking care of yourself through all of this?",
+    ];
+    
+    final keywords = {
+      'anxious': "It sounds like you're experiencing some anxiety. What physical sensations are you noticing?",
+      'depressed': "I hear that you're feeling down. When did you first notice these feelings?",
+      'stressed': "Stress can be overwhelming. What are the main sources of stress in your life right now?",
+      'angry': "Anger can be a valid response. What's underneath that anger for you?",
+      'sad': "Sadness is a natural emotion. What's contributing to these feelings?",
+      'tired': "Feeling tired can affect everything. How has your sleep been lately?",
+      'overwhelmed': "Being overwhelmed is challenging. What would help you feel more manageable?",
+      'lonely': "Loneliness can be difficult. What connections feel most important to you?",
+      'worried': "Worry can consume a lot of energy. What specifically are you most concerned about?",
+      'frustrated': "Frustration often signals something important. What's not working the way you'd like?",
+    };
+    
+    // Check for keywords
+    final lowerMessage = userMessage.toLowerCase();
+    for (final entry in keywords.entries) {
+      if (lowerMessage.contains(entry.key)) {
+        return entry.value;
+      }
+    }
+    
+    // Return random response
+    final index = DateTime.now().millisecondsSinceEpoch % responses.length;
+    return responses[index];
+  }
+  
+  Future<List<ChatMessage>> getRecentMessages({int limit = 50}) async {
+    await _storage.initialize();
+    return await _storage.getRecentMessages(limit: limit);
+  }
+  
+  Future<void> clearMessages() async {
+    await _storage.initialize();
+    await _storage.clearMessages();
   }
 
   void dispose() {

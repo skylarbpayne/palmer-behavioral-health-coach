@@ -21,7 +21,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _initializeAI();
-    _addWelcomeMessage();
+    _loadExistingMessages();
     _textController.addListener(() {
       setState(() {});
     });
@@ -30,6 +30,28 @@ class _ChatScreenState extends State<ChatScreen> {
   void _initializeAI() async {
     // Initialize AI service in the background
     await _chatService.initialize();
+  }
+
+  void _loadExistingMessages() async {
+    try {
+      final existingMessages = await _chatService.getRecentMessages();
+      setState(() {
+        _messages.clear();
+        _messages.addAll(existingMessages);
+      });
+      
+      // If no messages exist, add welcome message
+      if (_messages.isEmpty) {
+        _addWelcomeMessage();
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _scrollToBottom();
+        });
+      }
+    } catch (e) {
+      print('Failed to load existing messages: $e');
+      _addWelcomeMessage();
+    }
   }
 
   void _addWelcomeMessage() {
@@ -52,15 +74,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void _handleSubmitted(String text) async {
     if (text.trim().isEmpty) return;
 
-    final userMessage = ChatMessage(
-      id: 'user_${DateTime.now().millisecondsSinceEpoch}',
-      text: text.trim(),
-      isUser: true,
-      timestamp: DateTime.now(),
-    );
-
     setState(() {
-      _messages.add(userMessage);
       _isLoading = true;
     });
 
@@ -68,9 +82,14 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollToBottom();
 
     try {
+      // The AI service now handles storing both user and coach messages
       final response = await _chatService.generateResponse(text.trim());
+      
+      // Reload messages to get both user message and response from storage
+      final updatedMessages = await _chatService.getRecentMessages();
       setState(() {
-        _messages.add(response);
+        _messages.clear();
+        _messages.addAll(updatedMessages);
         _isLoading = false;
       });
       _scrollToBottom();
