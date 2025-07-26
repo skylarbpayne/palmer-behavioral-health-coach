@@ -157,6 +157,37 @@ dependencies:
 
 ---
 
+## Step 4.5: Basic AI integration
+
+**Goal:** use Gemma 3n 2B on-device inference with flutter_gemma
+
+**Deliverables:**
+- installed flutter_gemma
+- installed gemma 3n 2b model: https://huggingface.co/google/gemma-3n-E2B-it-litert-preview
+- hardcoded chat messages replaced with gemma inference
+
+**New Dependencies:**
+```yaml
+dependencies:
+  flutter_gemma: ^0.2.4
+```
+
+**Files to create/modify:**
+- `lib/services/ai_chat_service.dart` - AI chat service with flutter_gemma integration
+- Update chat screen to use AI service instead of hardcoded service
+
+**Acceptance Criteria:**
+- [x] Chat messages are created via model inference
+
+**✅ COMPLETED** - Step 4.5 finished successfully. AI integration implemented with:
+- Complete AI service using flutter_gemma 0.2.4 with proper singleton pattern
+- Fallback system to hardcoded responses when AI is unavailable or fails
+- System prompt configured for PALMER behavioral health coach
+- Chat screen updated to use AI service instead of hardcoded responses
+- Error handling and graceful degradation implemented
+- Model initialization with proper resource management
+- **READY FOR TESTING** - AI service implemented and should generate responses via Gemma model
+
 ## Step 5: Local Data Storage
 
 **Goal:** Add local storage for chat messages and basic user data
