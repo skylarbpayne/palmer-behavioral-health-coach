@@ -9,7 +9,10 @@
 - [ ] chore: allow bg processing (eg switch tabs)
 - [ ] feat: Add daily "processing" task to condense symptoms/interventions?
 - [ ] feat: new chat / separate chat functionality?
-- [ ] bug: seems like 
 - [ ] feat: download model from web?
 - [ ] chore: load model in background on app start?
-- [ ] chore: refactor into multiple LLM 'functions'
+- [x] chore: refactor into multiple LLM 'functions'
+- [x] bug: Figure out why we can only call generateChatResponseAsync once..?
+- [ ] chore: make defining llm functions more ergonomic?
+- [ ] chore: figure out how to make system prompt?
+- [ ] bug: validate that we have all variables for replacement.

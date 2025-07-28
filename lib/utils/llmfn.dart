@@ -15,36 +15,44 @@ class ModelManager {
   bool _isInitializing = false;
 
   Future<InferenceModel> getModel() async {
+    print('getting model');
     if (_model != null) return _model!;
     
     if (_isInitializing) {
+      print('model is initializing');
       while (_isInitializing) {
+        print('waiting for model to initialize...');
         await Future.delayed(const Duration(milliseconds: 100));
       }
+      print('model is initialized');
       if (_model != null) return _model!;
     }
+    print('model is not initializing');
 
     await _initializeModel();
     return _model!;
   }
 
   Future<void> _initializeModel() async {
+    print('initializing model');
     if (_isInitialized || _isInitializing) return;
     
     _isInitializing = true;
     try {
       final completer = Completer<void>();
-      
+      print('installing model');
       _gemma.modelManager.installModelFromAssetWithProgress('models/gemma-3n-E2B-it-int4.task').listen(
         (progress) => print('Model loading: $progress%'),
         onDone: () async {
           try {
+            print('creating model');
             _model = await _gemma.createModel(
               modelType: ModelType.gemmaIt,
               preferredBackend: PreferredBackend.gpu,
               maxTokens: 512,
               supportImage: false,
             );
+            print('model created');
             _isInitialized = true;
             completer.complete();
           } catch (e) {
@@ -53,7 +61,7 @@ class ModelManager {
         },
         onError: (error, stackTrace) => completer.completeError(error),
       );
-      
+      print('waiting for model to install');
       await completer.future;
     } finally {
       _isInitializing = false;
@@ -90,9 +98,9 @@ class LLMTool<T> {
 }
 
 /// Main LLM function class - highly ergonomic and simple to use
-class LLMFunction {
+class LLMFunction<T> {
   final String promptTemplate;
-  final String Function(String)? outputFormatter;
+  final T Function(String)? outputFormatter;
   final List<LLMTool> tools;
   final ModelManager _modelManager = ModelManager();
   
@@ -103,18 +111,23 @@ class LLMFunction {
   });
 
   /// Run the LLM function with the given variables
-  Future<String> run(Map<String, dynamic> variables) async {
+  Future<T> run(Map<String, dynamic> variables) async {
     final model = await _modelManager.getModel();
+    print('got model');
     final toolList = tools.map((t) => t.tool).toList();
+    // TODO: support state (e.g. for conversation history)
+    print('creating chat');
     final chat = await model.createChat(tools: toolList, supportsFunctionCalls: toolList.isNotEmpty);
-    
+    print('chat created');
     // Template substitution
     String prompt = promptTemplate;
     variables.forEach((key, value) {
       prompt = prompt.replaceAll('{$key}', value.toString());
     });
 
-    final message = Message(text: prompt, isUser: true);
+    // TODO: not sure how to add a system prompt.
+    // TODO: support multiple messages?
+    final message = Message.text(text: prompt, isUser: true);
     await chat.addQuery(message);
 
     String response = '';
@@ -128,7 +141,8 @@ class LLMFunction {
       }
     }
 
-    return outputFormatter?.call(response) ?? response;
+    await chat.session.close();
+    return outputFormatter?.call(response) ?? response as T;
   }
 
   Future<void> _handleToolCall(FunctionCallResponse toolCall) async {
@@ -142,9 +156,9 @@ class LLMFunction {
 }
 
 /// Convenient factory function for creating LLM functions
-LLMFunction llmfn({
+LLMFunction<T> llmfn<T>({
   required String promptTemplate,
-  String Function(String)? outputFormatter,
+  T Function(String)? outputFormatter,
   List<LLMTool> tools = const [],
 }) {
   return LLMFunction(
