@@ -44,15 +44,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       
       setState(() {
         _profile = profile;
-        _firstName = profile.firstName?.value ?? '';
-        _lastName = profile.lastName?.value ?? '';
-        _sex = profile.sex?.value;
-        _gender = profile.gender?.value ?? '';
-        _dateOfBirth = profile.dateOfBirth?.value ?? '';
-        _sexualOrientation = profile.sexualOrientation?.value ?? '';
-        _healthGoals = profile.currentHealthGoals?.map((item) => item.value).toList() ?? [];
-        _symptoms = profile.currentBehavioralHealthSymptoms?.map((item) => item.value).toList() ?? [];
-        _interventions = profile.currentInterventions?.map((item) => item.value).toList() ?? [];
+        _firstName = profile.firstName?.isActive == true ? profile.firstName!.value : '';
+        _lastName = profile.lastName?.isActive == true ? profile.lastName!.value : '';
+        _sex = profile.sex?.isActive == true ? profile.sex!.value : null;
+        _gender = profile.gender?.isActive == true ? profile.gender!.value : '';
+        _dateOfBirth = profile.dateOfBirth?.isActive == true ? profile.dateOfBirth!.value : '';
+        _sexualOrientation = profile.sexualOrientation?.isActive == true ? profile.sexualOrientation!.value : '';
+        _healthGoals = profile.getActiveHealthGoals().map((item) => item.value).toList();
+        _symptoms = profile.getActiveBehavioralHealthSymptoms().map((item) => item.value).toList();
+        _interventions = profile.getActiveInterventions().map((item) => item.value).toList();
         _isLoading = false;
       });
     } catch (e) {
@@ -78,52 +78,124 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
 
     try {
-      // Update simple fields
+      // Update simple fields with audit context
       if (_firstName.isNotEmpty) {
-        await _profileService.updateSimpleField('firstName', _firstName);
+        await _profileService.updateSimpleField(
+          'firstName', 
+          _firstName,
+          userId: 'user',
+          reason: 'profile_update',
+          changeContext: 'profile_screen',
+        );
       }
       if (_lastName.isNotEmpty) {
-        await _profileService.updateSimpleField('lastName', _lastName);
+        await _profileService.updateSimpleField(
+          'lastName', 
+          _lastName,
+          userId: 'user',
+          reason: 'profile_update',
+          changeContext: 'profile_screen',
+        );
       }
       if (_sex != null) {
-        await _profileService.updateSimpleField('sex', _sex!);
+        await _profileService.updateSimpleField(
+          'sex', 
+          _sex!,
+          userId: 'user',
+          reason: 'profile_update',
+          changeContext: 'profile_screen',
+        );
       }
       if (_gender.isNotEmpty) {
-        await _profileService.updateSimpleField('gender', _gender);
+        await _profileService.updateSimpleField(
+          'gender', 
+          _gender,
+          userId: 'user',
+          reason: 'profile_update',
+          changeContext: 'profile_screen',
+        );
       }
       if (_dateOfBirth.isNotEmpty) {
-        await _profileService.updateSimpleField('dateOfBirth', _dateOfBirth);
+        await _profileService.updateSimpleField(
+          'dateOfBirth', 
+          _dateOfBirth,
+          userId: 'user',
+          reason: 'profile_update',
+          changeContext: 'profile_screen',
+        );
       }
       if (_sexualOrientation.isNotEmpty) {
-        await _profileService.updateSimpleField('sexualOrientation', _sexualOrientation);
+        await _profileService.updateSimpleField(
+          'sexualOrientation', 
+          _sexualOrientation,
+          userId: 'user',
+          reason: 'profile_update',
+          changeContext: 'profile_screen',
+        );
       }
 
-      // Update array fields - clear and re-add all items
+      // Update array fields - soft delete current items and add new ones
       // Health Goals
-      final currentGoals = await _profileService.getArrayField('currentHealthGoals') ?? [];
+      final currentGoals = await _profileService.getActiveArrayField('currentHealthGoals') ?? [];
       for (final goal in currentGoals) {
-        await _profileService.removeArrayItem('currentHealthGoals', goal.id);
+        await _profileService.softDeleteArrayItem(
+          'currentHealthGoals', 
+          goal.id,
+          userId: 'user',
+          reason: 'profile_update_clear',
+          changeContext: 'profile_screen',
+        );
       }
       for (final goal in _healthGoals) {
-        await _profileService.addArrayItem('currentHealthGoals', goal);
+        await _profileService.addArrayItem(
+          'currentHealthGoals', 
+          goal,
+          userId: 'user',
+          reason: 'profile_update_add',
+          changeContext: 'profile_screen',
+        );
       }
 
       // Symptoms
-      final currentSymptoms = await _profileService.getArrayField('currentBehavioralHealthSymptoms') ?? [];
+      final currentSymptoms = await _profileService.getActiveArrayField('currentBehavioralHealthSymptoms') ?? [];
       for (final symptom in currentSymptoms) {
-        await _profileService.removeArrayItem('currentBehavioralHealthSymptoms', symptom.id);
+        await _profileService.softDeleteArrayItem(
+          'currentBehavioralHealthSymptoms', 
+          symptom.id,
+          userId: 'user',
+          reason: 'profile_update_clear',
+          changeContext: 'profile_screen',
+        );
       }
       for (final symptom in _symptoms) {
-        await _profileService.addArrayItem('currentBehavioralHealthSymptoms', symptom);
+        await _profileService.addArrayItem(
+          'currentBehavioralHealthSymptoms', 
+          symptom,
+          userId: 'user',
+          reason: 'profile_update_add',
+          changeContext: 'profile_screen',
+        );
       }
 
       // Interventions
-      final currentInterventions = await _profileService.getArrayField('currentInterventions') ?? [];
+      final currentInterventions = await _profileService.getActiveArrayField('currentInterventions') ?? [];
       for (final intervention in currentInterventions) {
-        await _profileService.removeArrayItem('currentInterventions', intervention.id);
+        await _profileService.softDeleteArrayItem(
+          'currentInterventions', 
+          intervention.id,
+          userId: 'user',
+          reason: 'profile_update_clear',
+          changeContext: 'profile_screen',
+        );
       }
       for (final intervention in _interventions) {
-        await _profileService.addArrayItem('currentInterventions', intervention);
+        await _profileService.addArrayItem(
+          'currentInterventions', 
+          intervention,
+          userId: 'user',
+          reason: 'profile_update_add',
+          changeContext: 'profile_screen',
+        );
       }
 
       setState(() {
@@ -152,13 +224,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       }
     }
-  }
-
-  String? _validateRequired(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'This field is required';
-    }
-    return null;
   }
 
   String? _validateName(String? value) {

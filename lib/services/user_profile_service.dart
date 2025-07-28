@@ -16,6 +16,12 @@ class UserProfileService {
     if (_isInitialized) return;
     
     await _storage.initialize();
+    
+    // Check for and run migration if needed
+    if (await _storage.needsMigration()) {
+      await _storage.migrateToNewFormat();
+    }
+    
     await loadProfile();
     _isInitialized = true;
   }
@@ -87,17 +93,46 @@ class UserProfileService {
     }
   }
 
-  Future<void> updateSimpleField<T>(String field, T value, {bool confirm = false}) async {
+  Future<void> updateSimpleField<T>(String field, T value, {
+    bool confirm = false,
+    String? userId,
+    String? reason,
+    String? changeContext,
+  }) async {
     await _ensureInitialized();
     
-    final now = DateTime.now();
-    final newField = ProfileField<T>(
-      value: value,
-      metadata: FieldMetadata(
-        lastChanged: now,
-        lastConfirmed: confirm ? now : null,
-      ),
-    );
+    final currentField = await getSimpleField<T>(field);
+    ProfileField<T> newField;
+    
+    if (currentField != null) {
+      newField = currentField.withNewValue(
+        value,
+        userId: userId,
+        reason: reason,
+        changeContext: changeContext,
+        confirm: confirm,
+      );
+    } else {
+      final now = DateTime.now();
+      newField = ProfileField<T>(
+        value: value,
+        metadata: FieldMetadata(
+          createdAt: now,
+          lastModified: now,
+          createdBy: userId ?? 'system',
+          modifiedBy: userId ?? 'system',
+          reason: reason,
+          changeContext: changeContext,
+        ),
+      );
+      if (confirm) {
+        newField = newField.confirmValue(
+          userId: userId,
+          reason: reason,
+          changeContext: changeContext,
+        );
+      }
+    }
     
     _cachedProfile ??= UserProfile.empty();
     
@@ -125,13 +160,18 @@ class UserProfileService {
     await saveProfile();
   }
 
-  Future<void> confirmSimpleField(String field) async {
+  Future<void> confirmSimpleField(String field, {
+    String? userId,
+    String? reason,
+    String? changeContext,
+  }) async {
     final currentField = await getSimpleField<dynamic>(field);
     if (currentField != null) {
-      final updatedMetadata = currentField.metadata.copyWith(
-        lastConfirmed: DateTime.now(),
+      final updatedField = currentField.confirmValue(
+        userId: userId,
+        reason: reason,
+        changeContext: changeContext,
       );
-      final updatedField = currentField.copyWith(metadata: updatedMetadata);
       
       _cachedProfile ??= UserProfile.empty();
       
@@ -176,7 +216,12 @@ class UserProfileService {
     }
   }
 
-  Future<String> addArrayItem(String field, String value, {bool confirm = false}) async {
+  Future<String> addArrayItem(String field, String value, {
+    bool confirm = false,
+    String? userId,
+    String? reason,
+    String? changeContext,
+  }) async {
     await _ensureInitialized();
     
     final now = DateTime.now();
@@ -184,40 +229,20 @@ class UserProfileService {
       value: value,
       id: const Uuid().v4(),
       metadata: FieldMetadata(
-        lastChanged: now,
-        lastConfirmed: confirm ? now : null,
+        createdAt: now,
+        lastModified: now,
+        createdBy: userId ?? 'system',
+        modifiedBy: userId ?? 'system',
+        reason: reason,
+        changeContext: changeContext,
       ),
     );
     
-    _cachedProfile ??= UserProfile.empty();
-    
-    switch (field) {
-      case 'currentHealthGoals':
-        final currentList = _cachedProfile!.currentHealthGoals ?? [];
-        _cachedProfile = _cachedProfile!.copyWith(
-          currentHealthGoals: [...currentList, newItem],
-        );
-        break;
-      case 'currentBehavioralHealthSymptoms':
-        final currentList = _cachedProfile!.currentBehavioralHealthSymptoms ?? [];
-        _cachedProfile = _cachedProfile!.copyWith(
-          currentBehavioralHealthSymptoms: [...currentList, newItem],
-        );
-        break;
-      case 'currentInterventions':
-        final currentList = _cachedProfile!.currentInterventions ?? [];
-        _cachedProfile = _cachedProfile!.copyWith(
-          currentInterventions: [...currentList, newItem],
-        );
-        break;
-    }
-    
-    await saveProfile();
-    return newItem.id;
-  }
-
-  Future<void> removeArrayItem(String field, String id) async {
-    await _ensureInitialized();
+    final finalItem = confirm ? newItem.confirmValue(
+      userId: userId,
+      reason: reason,
+      changeContext: changeContext,
+    ) : newItem;
     
     _cachedProfile ??= UserProfile.empty();
     
@@ -225,27 +250,33 @@ class UserProfileService {
       case 'currentHealthGoals':
         final currentList = _cachedProfile!.currentHealthGoals ?? [];
         _cachedProfile = _cachedProfile!.copyWith(
-          currentHealthGoals: currentList.where((item) => item.id != id).toList(),
+          currentHealthGoals: [...currentList, finalItem],
         );
         break;
       case 'currentBehavioralHealthSymptoms':
         final currentList = _cachedProfile!.currentBehavioralHealthSymptoms ?? [];
         _cachedProfile = _cachedProfile!.copyWith(
-          currentBehavioralHealthSymptoms: currentList.where((item) => item.id != id).toList(),
+          currentBehavioralHealthSymptoms: [...currentList, finalItem],
         );
         break;
       case 'currentInterventions':
         final currentList = _cachedProfile!.currentInterventions ?? [];
         _cachedProfile = _cachedProfile!.copyWith(
-          currentInterventions: currentList.where((item) => item.id != id).toList(),
+          currentInterventions: [...currentList, finalItem],
         );
         break;
     }
     
     await saveProfile();
+    return finalItem.id;
   }
 
-  Future<void> updateArrayItem(String field, String id, String value, {bool confirm = false}) async {
+  // Soft delete array item
+  Future<void> softDeleteArrayItem(String field, String id, {
+    String? userId,
+    String? reason,
+    String? changeContext,
+  }) async {
     await _ensureInitialized();
     
     _cachedProfile ??= UserProfile.empty();
@@ -255,12 +286,10 @@ class UserProfileService {
         final currentList = _cachedProfile!.currentHealthGoals ?? [];
         final updatedList = currentList.map((item) {
           if (item.id == id) {
-            return item.copyWith(
-              value: value,
-              metadata: item.metadata.copyWith(
-                lastChanged: DateTime.now(),
-                lastConfirmed: confirm ? DateTime.now() : item.metadata.lastConfirmed,
-              ),
+            return item.markDeleted(
+              userId: userId,
+              reason: reason,
+              changeContext: changeContext,
             );
           }
           return item;
@@ -271,12 +300,10 @@ class UserProfileService {
         final currentList = _cachedProfile!.currentBehavioralHealthSymptoms ?? [];
         final updatedList = currentList.map((item) {
           if (item.id == id) {
-            return item.copyWith(
-              value: value,
-              metadata: item.metadata.copyWith(
-                lastChanged: DateTime.now(),
-                lastConfirmed: confirm ? DateTime.now() : item.metadata.lastConfirmed,
-              ),
+            return item.markDeleted(
+              userId: userId,
+              reason: reason,
+              changeContext: changeContext,
             );
           }
           return item;
@@ -287,12 +314,10 @@ class UserProfileService {
         final currentList = _cachedProfile!.currentInterventions ?? [];
         final updatedList = currentList.map((item) {
           if (item.id == id) {
-            return item.copyWith(
-              value: value,
-              metadata: item.metadata.copyWith(
-                lastChanged: DateTime.now(),
-                lastConfirmed: confirm ? DateTime.now() : item.metadata.lastConfirmed,
-              ),
+            return item.markDeleted(
+              userId: userId,
+              reason: reason,
+              changeContext: changeContext,
             );
           }
           return item;
@@ -304,14 +329,319 @@ class UserProfileService {
     await saveProfile();
   }
 
-  Future<void> confirmArrayItem(String field, String id) async {
-    await updateArrayItem(field, id, (await _getArrayItemValue(field, id))!, confirm: true);
+  // Restore soft deleted array item
+  Future<void> restoreArrayItem(String field, String id, {
+    String? userId,
+    String? reason,
+    String? changeContext,
+  }) async {
+    await _ensureInitialized();
+    
+    _cachedProfile ??= UserProfile.empty();
+    
+    switch (field) {
+      case 'currentHealthGoals':
+        final currentList = _cachedProfile!.currentHealthGoals ?? [];
+        final updatedList = currentList.map((item) {
+          if (item.id == id) {
+            return item.restore(
+              userId: userId,
+              reason: reason,
+              changeContext: changeContext,
+            );
+          }
+          return item;
+        }).toList();
+        _cachedProfile = _cachedProfile!.copyWith(currentHealthGoals: updatedList);
+        break;
+      case 'currentBehavioralHealthSymptoms':
+        final currentList = _cachedProfile!.currentBehavioralHealthSymptoms ?? [];
+        final updatedList = currentList.map((item) {
+          if (item.id == id) {
+            return item.restore(
+              userId: userId,
+              reason: reason,
+              changeContext: changeContext,
+            );
+          }
+          return item;
+        }).toList();
+        _cachedProfile = _cachedProfile!.copyWith(currentBehavioralHealthSymptoms: updatedList);
+        break;
+      case 'currentInterventions':
+        final currentList = _cachedProfile!.currentInterventions ?? [];
+        final updatedList = currentList.map((item) {
+          if (item.id == id) {
+            return item.restore(
+              userId: userId,
+              reason: reason,
+              changeContext: changeContext,
+            );
+          }
+          return item;
+        }).toList();
+        _cachedProfile = _cachedProfile!.copyWith(currentInterventions: updatedList);
+        break;
+    }
+    
+    await saveProfile();
   }
 
-  Future<String?> _getArrayItemValue(String field, String id) async {
+  // Hard delete for backward compatibility (now deprecated)
+  @Deprecated('Use softDeleteArrayItem instead for audit trail compliance')
+  Future<void> removeArrayItem(String field, String id) async {
+    await softDeleteArrayItem(field, id, reason: 'legacy_hard_delete');
+  }
+
+  Future<void> updateArrayItem(String field, String id, String value, {
+    bool confirm = false,
+    String? userId,
+    String? reason,
+    String? changeContext,
+  }) async {
+    await _ensureInitialized();
+    
+    _cachedProfile ??= UserProfile.empty();
+    
+    switch (field) {
+      case 'currentHealthGoals':
+        final currentList = _cachedProfile!.currentHealthGoals ?? [];
+        final updatedList = currentList.map((item) {
+          if (item.id == id) {
+            return item.withNewValue(
+              value,
+              userId: userId,
+              reason: reason,
+              changeContext: changeContext,
+              confirm: confirm,
+            );
+          }
+          return item;
+        }).toList();
+        _cachedProfile = _cachedProfile!.copyWith(currentHealthGoals: updatedList);
+        break;
+      case 'currentBehavioralHealthSymptoms':
+        final currentList = _cachedProfile!.currentBehavioralHealthSymptoms ?? [];
+        final updatedList = currentList.map((item) {
+          if (item.id == id) {
+            return item.withNewValue(
+              value,
+              userId: userId,
+              reason: reason,
+              changeContext: changeContext,
+              confirm: confirm,
+            );
+          }
+          return item;
+        }).toList();
+        _cachedProfile = _cachedProfile!.copyWith(currentBehavioralHealthSymptoms: updatedList);
+        break;
+      case 'currentInterventions':
+        final currentList = _cachedProfile!.currentInterventions ?? [];
+        final updatedList = currentList.map((item) {
+          if (item.id == id) {
+            return item.withNewValue(
+              value,
+              userId: userId,
+              reason: reason,
+              changeContext: changeContext,
+              confirm: confirm,
+            );
+          }
+          return item;
+        }).toList();
+        _cachedProfile = _cachedProfile!.copyWith(currentInterventions: updatedList);
+        break;
+    }
+    
+    await saveProfile();
+  }
+
+  Future<void> confirmArrayItem(String field, String id, {
+    String? userId,
+    String? reason,
+    String? changeContext,
+  }) async {
+    await _ensureInitialized();
+    
+    _cachedProfile ??= UserProfile.empty();
+    
+    switch (field) {
+      case 'currentHealthGoals':
+        final currentList = _cachedProfile!.currentHealthGoals ?? [];
+        final updatedList = currentList.map((item) {
+          if (item.id == id) {
+            return item.confirmValue(
+              userId: userId,
+              reason: reason,
+              changeContext: changeContext,
+            );
+          }
+          return item;
+        }).toList();
+        _cachedProfile = _cachedProfile!.copyWith(currentHealthGoals: updatedList);
+        break;
+      case 'currentBehavioralHealthSymptoms':
+        final currentList = _cachedProfile!.currentBehavioralHealthSymptoms ?? [];
+        final updatedList = currentList.map((item) {
+          if (item.id == id) {
+            return item.confirmValue(
+              userId: userId,
+              reason: reason,
+              changeContext: changeContext,
+            );
+          }
+          return item;
+        }).toList();
+        _cachedProfile = _cachedProfile!.copyWith(currentBehavioralHealthSymptoms: updatedList);
+        break;
+      case 'currentInterventions':
+        final currentList = _cachedProfile!.currentInterventions ?? [];
+        final updatedList = currentList.map((item) {
+          if (item.id == id) {
+            return item.confirmValue(
+              userId: userId,
+              reason: reason,
+              changeContext: changeContext,
+            );
+          }
+          return item;
+        }).toList();
+        _cachedProfile = _cachedProfile!.copyWith(currentInterventions: updatedList);
+        break;
+    }
+    
+    await saveProfile();
+  }
+
+  // Get active array items (filtering out soft deleted)
+  Future<List<ProfileArrayItem<String>>?> getActiveArrayField(String field) async {
     final items = await getArrayField(field);
-    final item = items?.firstWhere((item) => item.id == id, orElse: () => throw StateError('Item not found'));
-    return item?.value;
+    return items?.where((item) => item.isActive).toList();
+  }
+
+  // Get deleted array items
+  Future<List<ProfileArrayItem<String>>?> getDeletedArrayField(String field) async {
+    final items = await getArrayField(field);
+    return items?.where((item) => item.isDeleted).toList();
+  }
+
+  // Soft delete a simple field
+  Future<void> softDeleteSimpleField(String field, {
+    String? userId,
+    String? reason,
+    String? changeContext,
+  }) async {
+    await _ensureInitialized();
+    
+    final currentField = await getSimpleField<dynamic>(field);
+    if (currentField != null) {
+      final deletedField = currentField.markDeleted(
+        userId: userId,
+        reason: reason,
+        changeContext: changeContext,
+      );
+      
+      _cachedProfile ??= UserProfile.empty();
+      
+      switch (field) {
+        case 'firstName':
+          _cachedProfile = _cachedProfile!.copyWith(firstName: deletedField as ProfileField<String>);
+          break;
+        case 'lastName':
+          _cachedProfile = _cachedProfile!.copyWith(lastName: deletedField as ProfileField<String>);
+          break;
+        case 'sex':
+          _cachedProfile = _cachedProfile!.copyWith(sex: deletedField as ProfileField<String>);
+          break;
+        case 'gender':
+          _cachedProfile = _cachedProfile!.copyWith(gender: deletedField as ProfileField<String>);
+          break;
+        case 'dateOfBirth':
+          _cachedProfile = _cachedProfile!.copyWith(dateOfBirth: deletedField as ProfileField<String>);
+          break;
+        case 'sexualOrientation':
+          _cachedProfile = _cachedProfile!.copyWith(sexualOrientation: deletedField as ProfileField<String>);
+          break;
+      }
+      
+      await saveProfile();
+    }
+  }
+
+  // Restore a soft deleted simple field
+  Future<void> restoreSimpleField(String field, {
+    String? userId,
+    String? reason,
+    String? changeContext,
+  }) async {
+    await _ensureInitialized();
+    
+    final currentField = await getSimpleField<dynamic>(field);
+    if (currentField != null && currentField.isDeleted) {
+      final restoredField = currentField.restore(
+        userId: userId,
+        reason: reason,
+        changeContext: changeContext,
+      );
+      
+      _cachedProfile ??= UserProfile.empty();
+      
+      switch (field) {
+        case 'firstName':
+          _cachedProfile = _cachedProfile!.copyWith(firstName: restoredField as ProfileField<String>);
+          break;
+        case 'lastName':
+          _cachedProfile = _cachedProfile!.copyWith(lastName: restoredField as ProfileField<String>);
+          break;
+        case 'sex':
+          _cachedProfile = _cachedProfile!.copyWith(sex: restoredField as ProfileField<String>);
+          break;
+        case 'gender':
+          _cachedProfile = _cachedProfile!.copyWith(gender: restoredField as ProfileField<String>);
+          break;
+        case 'dateOfBirth':
+          _cachedProfile = _cachedProfile!.copyWith(dateOfBirth: restoredField as ProfileField<String>);
+          break;
+        case 'sexualOrientation':
+          _cachedProfile = _cachedProfile!.copyWith(sexualOrientation: restoredField as ProfileField<String>);
+          break;
+      }
+      
+      await saveProfile();
+    }
+  }
+
+  // Check if a simple field is soft deleted
+  Future<bool> isSimpleFieldDeleted(String field) async {
+    final currentField = await getSimpleField<dynamic>(field);
+    return currentField?.isDeleted ?? false;
+  }
+
+  // Check if an array item is soft deleted
+  Future<bool> isArrayItemDeleted(String field, String id) async {
+    final items = await getArrayField(field);
+    final item = items?.firstWhere(
+      (item) => item.id == id,
+      orElse: () => throw StateError('Item not found'),
+    );
+    return item?.isDeleted ?? false;
+  }
+
+  // Get audit information for a simple field
+  Future<FieldMetadata?> getSimpleFieldMetadata(String field) async {
+    final currentField = await getSimpleField<dynamic>(field);
+    return currentField?.metadata;
+  }
+
+  // Get audit information for an array item
+  Future<FieldMetadata?> getArrayItemMetadata(String field, String id) async {
+    final items = await getArrayField(field);
+    final item = items?.firstWhere(
+      (item) => item.id == id,
+      orElse: () => throw StateError('Item not found'),
+    );
+    return item?.metadata;
   }
 
   Future<void> _ensureInitialized() async {
@@ -321,4 +651,27 @@ class UserProfileService {
   }
 
   bool get isInitialized => _isInitialized;
+
+  // Backup and restore functionality
+  Future<Map<String, dynamic>> createProfileBackup() async {
+    await _ensureInitialized();
+    return await _storage.createBackup();
+  }
+
+  Future<void> restoreProfileFromBackup(Map<String, dynamic> backup) async {
+    await _ensureInitialized();
+    await _storage.restoreFromBackup(backup);
+    await loadProfile();
+  }
+
+  // Check if profile data needs migration
+  Future<bool> needsDataMigration() async {
+    return await _storage.needsMigration();
+  }
+
+  // Manually trigger data migration
+  Future<void> migrateProfileData() async {
+    await _storage.migrateToNewFormat();
+    await loadProfile();
+  }
 }
