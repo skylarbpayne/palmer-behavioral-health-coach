@@ -5,6 +5,7 @@ import 'chat_storage_service.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:flutter_gemma/core/model.dart';
 import 'package:flutter_gemma/pigeon.g.dart';
+import 'user_profile_service.dart';
 
 class AiChatService {
   static final AiChatService _instance = AiChatService._internal();
@@ -13,6 +14,7 @@ class AiChatService {
 
   final FlutterGemmaPlugin _gemma = FlutterGemmaPlugin.instance;
   final ChatStorageService _storage = ChatStorageService();
+  final UserProfileService _profileService = UserProfileService();
   InferenceChat? chat;
   bool _isInitialized = false;
   bool _isInitializing = false;
@@ -27,7 +29,17 @@ Core responsibilities:
 4. Symptom observation and pattern recognition
 5. Evidence-based intervention suggestions
 
-Communication style: Warm, professional, curious, respectful. Keep responses concise but meaningful.""";
+Communication style: Warm, professional, curious, respectful. Keep responses concise but meaningful.
+
+Use the following process in all your responses:
+1. Extract any symptoms that are relevant
+2. Remember each symptom by using the saveSymptom tool
+3. Consider a set of possible interventions based on past and new symptoms
+4. Remember each intervention by using the saveIntervention tool
+5. Construct a concise reply recognizing the symptoms and interventions
+
+You should always begin with your tool calls.
+""";
 
   Future<void> initialize() async {
     if (_isInitialized || _isInitializing) {
@@ -73,84 +85,15 @@ Communication style: Warm, professional, curious, respectful. Keep responses con
           
           // Try different model configurations if needed
           InferenceModel? model;
-          try {
-            print('Attempting model creation with GPU backend...');
-            model = await _gemma.createModel(
-              modelType: ModelType.gemmaIt,
-              preferredBackend: PreferredBackend.gpu,
-              maxTokens: 512,
-              supportImage: false,
-            );
-          } catch (e) {
-            print('GPU backend failed: $e');
-            print('Falling back to CPU backend...');
-            try {
-              model = await _gemma.createModel(
-                modelType: ModelType.gemmaIt,
-                preferredBackend: PreferredBackend.cpu,
-                maxTokens: 256,  // Reduced tokens for CPU
-                supportImage: false,
-              );
-            } catch (cpuError) {
-              print('CPU backend also failed: $cpuError');
-              print('Trying minimal model configuration...');
-              model = await _gemma.createModel(
-                modelType: ModelType.gemmaIt,
-                maxTokens: 128,  // Minimal tokens
-                supportImage: false,
-              );
-            }
-          }
-          
-          print('Model created successfully.');
-          print('Available memory after model creation: ${_getAvailableMemoryInfo()}');
+          print('Attempting model creation with GPU backend...');
+          model = await _gemma.createModel(
+            modelType: ModelType.gemmaIt,
+            preferredBackend: PreferredBackend.gpu,
+            maxTokens: 512,
+            supportImage: false,
+          );
 
-          // Try creating chat with progressively minimal parameters
-          print('Creating chat instance - attempting different configurations...');
-          
-          final configs = [
-            {'name': 'Original', 'topK': 40, 'topP': 0.95, 'tokenBuffer': 256},
-            {'name': 'Reduced', 'topK': 20, 'topP': 0.9, 'tokenBuffer': 128},
-            {'name': 'Minimal', 'topK': 10, 'topP': 0.8, 'tokenBuffer': 64},
-            {'name': 'Ultra-minimal', 'topK': 5, 'topP': 0.7, 'tokenBuffer': 32},
-          ];
-          
-          Exception? lastError;
-          for (final config in configs) {
-            try {
-              print('Trying ${config['name']} configuration: topK=${config['topK']}, topP=${config['topP']}, tokenBuffer=${config['tokenBuffer']}');
-              
-              chat = await model.createChat(
-                temperature: 0.7,
-                randomSeed: 1,
-                topK: config['topK'] as int,
-                topP: config['topP'] as double,
-                tokenBuffer: config['tokenBuffer'] as int,
-                supportImage: false,
-                supportsFunctionCalls: false,
-              );
-              
-              print('✅ Success with ${config['name']} configuration');
-              break;
-              
-            } catch (e) {
-              lastError = e is Exception ? e : Exception(e.toString());
-              print('❌ Failed with ${config['name']} configuration: $e');
-              
-              // If this is the last config, try absolute minimum
-              if (config == configs.last) {
-                print('Attempting bare minimum chat creation...');
-                try {
-                  chat = await model.createChat();
-                  print('✅ Success with default parameters');
-                  break;
-                } catch (finalError) {
-                  print('❌ Even default parameters failed: $finalError');
-                  throw Exception('All chat creation attempts failed. Last error: $lastError');
-                }
-              }
-            }
-          }
+          chat = await model.createChat(tools: _tools, supportsFunctionCalls: true);
           
           print('Chat instance created successfully.');
           completer.complete();
@@ -187,16 +130,19 @@ Communication style: Warm, professional, curious, respectful. Keep responses con
       await initialize();
     }
     
+    print('Tools: ${chat!.tools}');
+    print('Supports function calls: ${chat!.supportsFunctionCalls}');
+    
     String responseText;
     if (!isReady()) {
       // Use fallback response if AI fails
-      responseText = _generateFallbackResponse(userMessage);
+      responseText = 'AI response failed';
     } else {
       try {
         responseText = await _generateAIResponse(userMessage);
       } catch (e) {
         print('AI response failed, using fallback: $e');
-        responseText = _generateFallbackResponse(userMessage);
+        responseText = 'AI response failed';
       }
     }
 
@@ -223,9 +169,19 @@ Communication style: Warm, professional, curious, respectful. Keep responses con
       final responseStream = chat!.generateChatResponseAsync();
       String fullResponse = '';
       
+      // TODO: progressively show what is being typed on the screen.
       await for (final modelResponse in responseStream) {
         if (modelResponse is TextResponse) {
           fullResponse += modelResponse.token;
+        }
+        else if (modelResponse is FunctionCallResponse) {
+          print('Calling tool: ${modelResponse.name} with args: ${modelResponse.args}');
+          if (modelResponse.name == 'saveSymptom') {
+            await _profileService.addArrayItem('currentBehavioralHealthSymptoms', modelResponse.args['symptom']);
+          }
+          else if (modelResponse.name == 'saveIntervention') {
+            await _profileService.addArrayItem('currentInterventions', modelResponse.args['intervention']);
+          }
         }
       }
       
@@ -246,8 +202,8 @@ Communication style: Warm, professional, curious, respectful. Keep responses con
       }
       
       // Ensure we have a meaningful response
-      if (cleanResponse.isEmpty || cleanResponse.length < 10) {
-        throw Exception('Response too short or empty');
+      if (cleanResponse.isEmpty) {
+        throw Exception('Response empty');
       }
       
       return cleanResponse;
@@ -265,48 +221,6 @@ Communication style: Warm, professional, curious, respectful. Keep responses con
     }
     return 'Native platform - detailed memory info requires platform-specific implementation';
   }
-
-  String _generateFallbackResponse(String userMessage) {
-    final responses = [
-      "Hello! I'm PALMER, your behavioral health coach. How are you feeling today?",
-      "That's interesting. Can you tell me more about that?",
-      "I understand. What would you like to work on?",
-      "That sounds like a great goal. How can I help you achieve it?",
-      "I hear you. How has that been affecting you lately?",
-      "Thank you for sharing that with me. What support would be most helpful right now?",
-      "It sounds like you're going through a challenging time. What coping strategies have you tried?",
-      "I appreciate your openness. What would feel most manageable for you today?",
-      "That makes sense. How do you usually handle situations like this?",
-      "I'm here to support you. What's one small step you could take today?",
-      "That's a lot to process. What feels most important to focus on right now?",
-      "How are you taking care of yourself through all of this?",
-    ];
-    
-    final keywords = {
-      'anxious': "It sounds like you're experiencing some anxiety. What physical sensations are you noticing?",
-      'depressed': "I hear that you're feeling down. When did you first notice these feelings?",
-      'stressed': "Stress can be overwhelming. What are the main sources of stress in your life right now?",
-      'angry': "Anger can be a valid response. What's underneath that anger for you?",
-      'sad': "Sadness is a natural emotion. What's contributing to these feelings?",
-      'tired': "Feeling tired can affect everything. How has your sleep been lately?",
-      'overwhelmed': "Being overwhelmed is challenging. What would help you feel more manageable?",
-      'lonely': "Loneliness can be difficult. What connections feel most important to you?",
-      'worried': "Worry can consume a lot of energy. What specifically are you most concerned about?",
-      'frustrated': "Frustration often signals something important. What's not working the way you'd like?",
-    };
-    
-    // Check for keywords
-    final lowerMessage = userMessage.toLowerCase();
-    for (final entry in keywords.entries) {
-      if (lowerMessage.contains(entry.key)) {
-        return entry.value;
-      }
-    }
-    
-    // Return random response
-    final index = DateTime.now().millisecondsSinceEpoch % responses.length;
-    return responses[index];
-  }
   
   Future<List<ChatMessage>> getRecentMessages({int limit = 50}) async {
     await _storage.initialize();
@@ -323,4 +237,27 @@ Communication style: Warm, professional, curious, respectful. Keep responses con
     _isInitialized = false;
     _isInitializing = false;
   }
+
+  final List<Tool> _tools = [
+    const Tool(
+      name: 'saveSymptom',
+      description: 'Save a symptom to the user\'s profile',
+      parameters: {
+        'type': 'object',
+        'properties': {
+          'symptom': {'type': 'string'},
+        },
+      },
+    ),
+    const Tool(
+      name: 'saveIntervention',
+      description: 'Save an intervention to the user\'s profile',
+      parameters: {
+        'type': 'object',
+        'properties': {
+          'intervention': {'type': 'string'},
+        },
+      },
+    )
+  ];
 }
