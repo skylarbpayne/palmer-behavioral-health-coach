@@ -17,11 +17,6 @@ class UserProfileService {
     
     await _storage.initialize();
     
-    // Check for and run migration if needed
-    if (await _storage.needsMigration()) {
-      await _storage.migrateToNewFormat();
-    }
-    
     await loadProfile();
     _isInitialized = true;
   }
@@ -33,7 +28,7 @@ class UserProfileService {
     }
     
     try {
-      final profileData = await _storage.getSecure(_profileKey);
+      final profileData = await _storage.get(_profileKey);
       if (profileData != null) {
         _cachedProfile = UserProfile.fromJson(profileData);
       } else {
@@ -53,7 +48,7 @@ class UserProfileService {
     if (_cachedProfile == null) return;
     
     try {
-      await _storage.storeSecure(_profileKey, _cachedProfile!.toJson());
+      await _storage.store(_profileKey, _cachedProfile!.toJson());
     } catch (e) {
       print('Failed to save profile: $e');
       throw Exception('Failed to save profile');
@@ -648,30 +643,5 @@ class UserProfileService {
     if (!_isInitialized) {
       await initialize();
     }
-  }
-
-  bool get isInitialized => _isInitialized;
-
-  // Backup and restore functionality
-  Future<Map<String, dynamic>> createProfileBackup() async {
-    await _ensureInitialized();
-    return await _storage.createBackup();
-  }
-
-  Future<void> restoreProfileFromBackup(Map<String, dynamic> backup) async {
-    await _ensureInitialized();
-    await _storage.restoreFromBackup(backup);
-    await loadProfile();
-  }
-
-  // Check if profile data needs migration
-  Future<bool> needsDataMigration() async {
-    return await _storage.needsMigration();
-  }
-
-  // Manually trigger data migration
-  Future<void> migrateProfileData() async {
-    await _storage.migrateToNewFormat();
-    await loadProfile();
   }
 }

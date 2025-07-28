@@ -34,7 +34,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _loadExistingMessages() async {
     try {
-      final existingMessages = await _chatService.getRecentMessages();
+      final existingMessages = await _chatService.getMessages();
+      print('num messages: ${existingMessages.length}');
+
       setState(() {
         _messages.clear();
         _messages.addAll(existingMessages);
@@ -75,6 +77,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (text.trim().isEmpty) return;
 
     setState(() {
+      _messages.add(ChatMessage(id: 'user_${DateTime.now().millisecondsSinceEpoch}', text: text, isUser: true, timestamp: DateTime.now()));
       _isLoading = true;
     });
 
@@ -83,10 +86,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       // The AI service now handles storing both user and coach messages
-      final response = await _chatService.generateResponse(text.trim());
+      final _ = await _chatService.generateResponse(text.trim());
       
       // Reload messages to get both user message and response from storage
-      final updatedMessages = await _chatService.getRecentMessages();
+      final updatedMessages = await _chatService.getMessages();
       setState(() {
         _messages.clear();
         _messages.addAll(updatedMessages);

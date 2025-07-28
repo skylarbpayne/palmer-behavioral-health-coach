@@ -52,12 +52,15 @@ class AiChatService {
       'symptoms': symptoms,
       'interventions': interventions,
     });
+
+    // TEMP for testing
+    // const responseText = 'This is a test response';
     return await _storage.addCoachResponse(responseText);
   }
   
-  Future<List<ChatMessage>> getRecentMessages({int limit = 50}) async {
+  Future<List<ChatMessage>> getMessages() async {
     await _storage.initialize();
-    return await _storage.getRecentMessages(limit: limit);
+    return await _storage.getMessages();
   }
   
   Future<void> clearMessages() async {

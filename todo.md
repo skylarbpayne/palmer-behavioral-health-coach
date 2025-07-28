@@ -3,9 +3,9 @@
 - [x] Provide tools for updating symptoms and interventions
 - [ ] feat: Integrate Health (into profile too)
 - [ ] feat: Optimize prompt
-- [ ] bug: Show user message before generating AI response
-- [ ] feat: Stream text responses
-- [ ] bug: fix duplicate messages on fresh load?
+- [x] bug: Show user message before generating AI response
+- [x] feat: Stream text responses
+- [ ] bug: fix duplicate messages on fresh load? => definitely a bug with duplicate saving.
 - [ ] chore: allow bg processing (eg switch tabs)
 - [ ] feat: Add daily "processing" task to condense symptoms/interventions?
 - [ ] feat: new chat / separate chat functionality?
