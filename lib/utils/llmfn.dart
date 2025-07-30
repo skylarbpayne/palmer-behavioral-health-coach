@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:flutter_gemma/core/model.dart';
 import 'package:flutter_gemma/pigeon.g.dart';
+import 'prompt_template.dart';
 
 /// Centralized model manager - ensures only one model is loaded at a time
 class ModelManager {
@@ -119,14 +120,10 @@ class LLMFunction<T> {
     print('creating chat');
     final chat = await model.createChat(tools: toolList, supportsFunctionCalls: toolList.isNotEmpty);
     print('chat created');
-    // Template substitution
-    String prompt = promptTemplate;
-    variables.forEach((key, value) {
-      prompt = prompt.replaceAll('{$key}', value.toString());
-    });
 
-    // TODO: not sure how to add a system prompt.
-    // TODO: support multiple messages?
+    final template = PromptTemplate.fromString(promptTemplate);
+    final prompt = template.format(variables);
+
     final message = Message.text(text: prompt, isUser: true);
     await chat.addQuery(message);
 
