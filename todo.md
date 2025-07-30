@@ -2,17 +2,17 @@
 - [x] Update storage to contain metadata (who, what, when, why)
 - [x] Provide tools for updating symptoms and interventions
 - [ ] feat: Integrate Health (into profile too)
-- [ ] feat: Optimize prompt
+- [ ] feat: Optimize prompt for shorter responses
 - [x] bug: Show user message before generating AI response
 - [x] feat: Stream text responses
-- [ ] bug: fix duplicate messages on fresh load? => definitely a bug with duplicate saving.
+- [x] bug: fix duplicate messages on fresh load? => definitely a bug with duplicate saving.
 - [ ] chore: allow bg processing (eg switch tabs)
 - [ ] feat: Add daily "processing" task to condense symptoms/interventions?
 - [ ] feat: new chat / separate chat functionality?
-- [ ] feat: download model from web?
 - [ ] chore: load model in background on app start?
 - [x] chore: refactor into multiple LLM 'functions'
 - [x] bug: Figure out why we can only call generateChatResponseAsync once..?
-- [ ] chore: make defining llm functions more ergonomic?
-- [ ] chore: figure out how to make system prompt?
-- [ ] bug: validate that we have all variables for replacement.
+- [x] bug: validate that we have all variables for replacement.
+- [x] feat: add library of interventions to choose from, only output indices
+- [x] feat: add library of symptoms to choose from, only output indices
+- [ ] feat: use short-hands to refer to phrases (instead of outputting long phrases)

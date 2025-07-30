@@ -35,11 +35,11 @@ class AiChatService {
     final symptoms = await ExtractSymptoms.run({'userMessage': userMessage});
     print('symptoms: $symptoms');
     for (var symptom in symptoms) {
-      await _profileService.addArrayItem('currentBehavioralHealthSymptoms', symptom, confirm: true, userId: 'palmerai', reason: 'extracted from user message');
+      await _profileService.addArrayItem('currentBehavioralHealthSymptoms', symptom.name, confirm: true, userId: 'palmerai', reason: 'extracted from user message');
     }
 
     print('suggesting interventions');
-    final interventions = await SuggestInterventions.run({'userMessage': userMessage});
+    final interventions = await SuggestInterventions.run({'userProfile': userProfile, 'symptoms': symptoms, 'userMessage': userMessage});
     print('interventions: $interventions');
     for (var intervention in interventions) {
       await _profileService.addArrayItem('currentInterventions', intervention.name, confirm: true, userId: 'palmerai', reason: 'suggested by PALMER');
