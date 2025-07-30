@@ -21,13 +21,15 @@ EXAMPLE RESPONSE: 1,2,3
 INTERVENTIONS:
 $_interventions
 ---
-
+DAILY STEPS: {{weekSteps}}
+DAILY SLEEP: {{weekSleep}}
+---
 {userMessage}
 """;
 
 final Map<int, Intervention> interventionMap = Map.fromEntries(INTERVENTIONS.map((i) => MapEntry(i.id, i)));
 List<Intervention> mapInterventions(String response) {
-  final ids = response.trim().split('\n');
+  final ids = response.trim().split(',');
   final interventions = ids.map((id) => interventionMap[int.parse(id)]).where((i) => i != null).toList();
   return interventions.cast<Intervention>();
 }

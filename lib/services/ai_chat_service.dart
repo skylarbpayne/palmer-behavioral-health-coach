@@ -5,6 +5,7 @@ import 'user_profile_service.dart';
 import '../fns/extract_symptoms.dart';
 import '../fns/suggest_interventions.dart';
 import '../fns/reply.dart';
+import '../services/health_service.dart';
 
 class AiChatService {
   static final AiChatService _instance = AiChatService._internal();
@@ -13,6 +14,7 @@ class AiChatService {
 
   final ChatStorageService _storage = ChatStorageService();
   final UserProfileService _profileService = UserProfileService();
+  final HealthService _healthService = HealthService();
 
   Future<void> initialize() async {
     try {
@@ -30,16 +32,23 @@ class AiChatService {
     await _storage.addUserMessage(userMessage);
 
     final userProfile = await _profileService.loadProfile();
-  
+    final bool isAuthorized = await _healthService.initialize();
+    if (!isAuthorized) {
+      print('not authorized for health data');
+    }
+    final lastWeekData = await _healthService.getLast7DaysHealthData();
+    final weekSteps = lastWeekData['steps'];
+    final weekSleep = lastWeekData['sleep'];
+
     print('extracting symptoms');
-    final symptoms = await ExtractSymptoms.run({'userMessage': userMessage});
+    final symptoms = await ExtractSymptoms.run({'userMessage': userMessage, 'weekSteps': weekSteps, 'weekSleep': weekSleep});
     print('symptoms: $symptoms');
     for (var symptom in symptoms) {
       await _profileService.addArrayItem('currentBehavioralHealthSymptoms', symptom.name, confirm: true, userId: 'palmerai', reason: 'extracted from user message');
     }
 
     print('suggesting interventions');
-    final interventions = await SuggestInterventions.run({'userProfile': userProfile, 'symptoms': symptoms, 'userMessage': userMessage});
+    final interventions = await SuggestInterventions.run({'userProfile': userProfile, 'weekSteps': weekSteps, 'weekSleep': weekSleep, 'symptoms': symptoms, 'userMessage': userMessage});
     print('interventions: $interventions');
     for (var intervention in interventions) {
       await _profileService.addArrayItem('currentInterventions', intervention.name, confirm: true, userId: 'palmerai', reason: 'suggested by PALMER');
@@ -49,6 +58,8 @@ class AiChatService {
     final String responseText = await PalmerReply.run({
       'userMessage': userMessage,
       'userProfile': userProfile,
+      'weekSteps': weekSteps,
+      'weekSleep': weekSleep,
       'symptoms': symptoms,
       'interventions': interventions,
     });

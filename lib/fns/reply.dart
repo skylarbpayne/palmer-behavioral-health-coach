@@ -7,6 +7,9 @@ Given the user's profile, symptoms, and interventions, you should construct a re
 
 {userProfile}
 
+DAILY STEPS: {{weekSteps}}
+DAILY SLEEP: {{weekSleep}}
+
 {symptoms}
 
 {interventions}

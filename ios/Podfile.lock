@@ -1,9 +1,13 @@
 PODS:
+  - device_info_plus (0.0.1):
+    - Flutter
   - Flutter (1.0.0)
   - flutter_gemma (0.8.6):
     - Flutter
     - MediaPipeTasksGenAI (= 0.10.24)
     - MediaPipeTasksGenAIC (= 0.10.24)
+  - health (13.1.1):
+    - Flutter
   - large_file_handler (0.0.1):
     - Flutter
   - MediaPipeTasksGenAI (0.10.24):
@@ -17,8 +21,10 @@ PODS:
     - FlutterMacOS
 
 DEPENDENCIES:
+  - device_info_plus (from `.symlinks/plugins/device_info_plus/ios`)
   - Flutter (from `Flutter`)
   - flutter_gemma (from `.symlinks/plugins/flutter_gemma/ios`)
+  - health (from `.symlinks/plugins/health/ios`)
   - large_file_handler (from `.symlinks/plugins/large_file_handler/ios`)
   - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
@@ -29,10 +35,14 @@ SPEC REPOS:
     - MediaPipeTasksGenAIC
 
 EXTERNAL SOURCES:
+  device_info_plus:
+    :path: ".symlinks/plugins/device_info_plus/ios"
   Flutter:
     :path: Flutter
   flutter_gemma:
     :path: ".symlinks/plugins/flutter_gemma/ios"
+  health:
+    :path: ".symlinks/plugins/health/ios"
   large_file_handler:
     :path: ".symlinks/plugins/large_file_handler/ios"
   path_provider_foundation:
@@ -41,8 +51,10 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/shared_preferences_foundation/darwin"
 
 SPEC CHECKSUMS:
+  device_info_plus: bf2e3232933866d73fe290f2942f2156cdd10342
   Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
   flutter_gemma: 130315f51c8c891729aaf7ed3987f2e8e44eca3d
+  health: d215443242b260036fa91f91d8f3504c327a127f
   large_file_handler: e3686e246052b0f03955789d3a04604574f80afe
   MediaPipeTasksGenAI: 076ba7032a6e9da16db9c7cf0c3b67c751c18bc1
   MediaPipeTasksGenAIC: ec35d9f431f6a6b651a0bc9f67a4ed149ffa575c

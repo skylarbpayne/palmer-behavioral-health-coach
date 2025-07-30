@@ -47,5 +47,9 @@
 	<true/>
 	<key>UIFileSharingEnabled</key>
 	<true/>
+	<key>NSHealthShareUsageDescription</key>
+	<string>This app needs access to health data to track your steps and sleep patterns for behavioral health insights.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>This app needs access to health data to track your steps and sleep patterns for behavioral health insights.</string>
 </dict>
 </plist>

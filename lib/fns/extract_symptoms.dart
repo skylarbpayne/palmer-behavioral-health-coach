@@ -18,13 +18,16 @@ EXAMPLE RESPONSE: 1,2,3
 SYMPTOMS:
 $_symptoms
 ---
+DAILY STEPS: {{weekSteps}}
+DAILY SLEEP: {{weekSleep}}
+---
 {userMessage}
 """;
 
 final Map<int, Symptom> symptomMap = Map.fromEntries(SYMPTOMS.map((s) => MapEntry(s.id, s)));
 
 List<Symptom> mapSymptoms(String response) {
-  final ids = response.trim().split('\n');
+  final ids = response.trim().split(',');
   final symptoms = ids.map((id) => symptomMap[int.parse(id)]).where((s) => s != null).toList();
   return symptoms.cast<Symptom>();
 }
